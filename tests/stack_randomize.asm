@@ -1,13 +1,12 @@
-%macro _PATCH 1
-global patch_%1
-extern back_%1
-patch_%1:
-%endmacro
-%define PATCH(x) _PATCH x
-%define BACK(x) back_ %+ x
+%include "src/macros.mac"
 
     [BITS 32]
     section .text
 
 PATCH(08048601)
-    jmp BACK(08048601)
+    jmp BACK
+END_PATCH
+
+PATCH(08048606)
+    jmp BACK
+END_PATCH

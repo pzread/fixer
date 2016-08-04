@@ -1,0 +1,10 @@
+%macro _PATCH 1
+global patch_%1
+extern back_%1
+patch_%1:
+%define BACK back_%1
+%endmacro
+%macro END_PATCH 0
+%undef BACK
+%endmacro
+%define PATCH(x) _PATCH x
