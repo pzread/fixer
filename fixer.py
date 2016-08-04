@@ -66,16 +66,13 @@ def link_payload(elfpaths, text_addr, outpath, static=False):
     data = subprocess.check_output(['objdump', '-t', outpath])
     data = data.decode('utf-8')
     funclist = list()
-    print('Name Address')
     for line in data.split('\n'):
         parts = line.rstrip('\n').split(' ')
         if len(parts) < 3:
             continue
         if parts[1] != 'g':
             continue
-        funcpair = (parts[-1], int(parts[0], 16))
-        print('%s 0x%08x'%funcpair)
-        funclist.append(funcpair)
+        funclist.append((parts[-1], int(parts[0], 16)))
 
     return funclist
 
@@ -85,8 +82,8 @@ def dump_binary(objpath, textpath):
             objpath, textpath])
 
 
-def patch(binpath, textpath, text_off, text_addr, outpath):
-    subprocess.check_output(['./bin/patch', binpath, outpath,
+def append(binpath, textpath, text_off, text_addr, outpath):
+    subprocess.check_output(['./bin/append', binpath, outpath,
             textpath, str(text_off), str(text_addr)])
 
 
@@ -112,8 +109,8 @@ def main():
 
     payelf = tempfile.NamedTemporaryFile()
     compile_payload(paypath, payelf.name)
-    payobj = tempfile.NamedTemporaryFile()
-    funclist = link_payload([payelf.name], text_addr, payobj.name)
+    with tempfile.NamedTemporaryFile() as tmpobj:
+        funclist = link_payload([payelf.name], text_addr, tmpobj.name)
 
     patchlist = list()
     for name, addr in funclist:
@@ -156,11 +153,12 @@ def main():
     oriasm.flush()
     orielf = tempfile.NamedTemporaryFile()
     compile_payload(oriasm.name, orielf.name)
-    funclist = link_payload([payelf.name, orielf.name], text_addr, payobj.name)
+    payobj = tempfile.NamedTemporaryFile()
+    link_payload([payelf.name, orielf.name], text_addr, payobj.name, True)
     paytext = tempfile.NamedTemporaryFile()
     dump_binary(payobj.name, paytext.name)
 
-    patch(binpath, paytext.name, text_off, text_addr, outputpath)
+    append(binpath, paytext.name, text_off, text_addr, outputpath)
 
     with open(outputpath, 'r+b') as outputf:
         for patch_off, code in patchcode:

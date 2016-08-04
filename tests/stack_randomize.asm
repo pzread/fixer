@@ -9,5 +9,5 @@ patch_%1:
     [BITS 32]
     section .text
 
-PATCH(08048606)
-    jmp BACK(08048606)
+PATCH(08048601)
+    jmp BACK(08048601)
