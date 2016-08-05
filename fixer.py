@@ -180,8 +180,7 @@ def main():
 
         binm.close()
 
-    #oriasm = tempfile.NamedTemporaryFile()
-    oriasm = open('x', 'wb')
+    oriasm = tempfile.NamedTemporaryFile()
     oriasm.write(('\n'.join(oricode) + '\n').encode('utf-8'))
     oriasm.flush()
     orielf = tempfile.NamedTemporaryFile()

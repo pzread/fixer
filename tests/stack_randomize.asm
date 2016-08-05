@@ -4,6 +4,14 @@
     section .text
 
 PATCH(ENTRY)
+    mov edx, esp
+    mov ecx, 0
+    mov ebx, 16777216
+    mov eax, 5
+    int 0x80
+    mov esp, DWORD [esp]
+    add esp, 16777212
+
     mov edi, ecx
     mov edx, 0
     mov ecx, 4
