@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import argparse
 import mmap
 import os
@@ -9,8 +10,15 @@ import tempfile
 from capstone import *
 
 
+SCRIPT_DIR = os.path.dirname(sys.argv[0]) + '/'
+SRC_DIR = os.path.join(SCRIPT_DIR, 'src') + '/'
+SCAN_TOOL = os.path.join(SCRIPT_DIR, 'bin/scan')
+APPEND_TOOL = os.path.join(SCRIPT_DIR, 'bin/append')
+LINKER_SCRIPT = os.path.join(SRC_DIR, 'payload.lds')
+
+
 def scan(binpath):
-    data = subprocess.check_output(['./bin/scan', binpath])
+    data = subprocess.check_output([SCAN_TOOL, binpath])
     data = data.decode('utf-8')
     lines = data.split('\n')
     entry, = lines[0].rstrip('\n').split(' ')
@@ -58,14 +66,14 @@ def vaddr_offset(phlist, vaddr):
 
 def compile_payload(paypath, outpath, asm):
     if asm == 'nasm':
-        subprocess.check_output(['nasm', '-O0', '-f', 'elf', '-o',
-                outpath, paypath])
+        subprocess.check_output(['nasm', '-O0', '-f', 'elf', '-I', SRC_DIR,
+                '-o', outpath, paypath])
     elif asm == 'as':
         subprocess.check_output(['as', '--32', '-o', outpath, paypath])
 
 
 def link_payload(elfpaths, text_addr, outpath, static=False):
-    params = ['ld', '-m', 'elf_i386', '-T', './src/payload.lds',
+    params = ['ld', '-m', 'elf_i386', '-T', LINKER_SCRIPT,
             '--oformat', 'elf32-i386', '-Ttext=0x%x'%text_addr, '-o', outpath]
     if static:
         params += ['--static']
@@ -92,7 +100,7 @@ def dump_binary(objpath, textpath):
 
 
 def append(binpath, textpath, text_off, text_addr, outpath):
-    subprocess.check_output(['./bin/append', binpath, outpath,
+    subprocess.check_output([APPEND_TOOL, binpath, outpath,
             textpath, str(text_off), str(text_addr)])
 
 
@@ -137,10 +145,10 @@ def main():
     with tempfile.NamedTemporaryFile() as tmpobj:
         funclist = link_payload([payelf.name], 0x0, tmpobj.name)
 
+    # Generate the helper code.
     patchpos = get_patchpos(funclist)
     patchmap = dict()
     oricode = ['.intel_syntax noprefix', '.section .backtext']
-
     with open(binpath, 'r+b') as binf:
         binm = mmap.mmap(binf.fileno(), 0)
         for patch_token, _ in patchpos:
@@ -180,6 +188,7 @@ def main():
     paytext = tempfile.NamedTemporaryFile()
     dump_binary(payobj.name, paytext.name)
 
+    # Find the suitable position.
     paytext_size = os.stat(paytext.name).st_size
     text_off = None
     text_addr = None
@@ -190,16 +199,19 @@ def main():
             text_addr = addr
             break
 
+    print('Append at 0x%08x'%text_addr)
+
     funclist = link_payload([payelf.name, orielf.name],
             text_addr, payobj.name, True)
     dump_binary(payobj.name, paytext.name)
 
+    # Generate patch code.
     patchpos = get_patchpos(funclist)
     patchcode = list()
     for patch_token, target_addr in patchpos:
         patch_off, patch_addr, patch_len = patchmap[patch_token]
-        jmpins = b'\xE9' + struct.pack(
-                'I', (target_addr - patch_addr - 5) & 0xFFFFFFFF)
+        jmpdis = (target_addr - patch_addr - 5) & 0xFFFFFFFF
+        jmpins = b'\xE9' + struct.pack('I', jmpdis)
         code = bytes(jmpins + b'\x90' * (patch_len - len(jmpins)))
         patchcode.append((patch_off, code))
 

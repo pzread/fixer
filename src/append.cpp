@@ -83,6 +83,7 @@ int main(int argc, char *argv[]) {
     // Try to do inner append.
     bool appended = false;
     phdr = cgcef32_getphdr(cgcef);
+
     for(size_t i = 0; i < ehdr->e_phnum; ++i, ++phdr) {
         if(phdr->p_type == PT_LOAD) {
             if(text_addr != phdr->p_vaddr + phdr->p_memsz) {

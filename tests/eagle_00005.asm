@@ -1,4 +1,4 @@
-%include "src/macros.mac"
+%include "macros.mac"
 
     [BITS 32]
     section .text
