@@ -123,7 +123,7 @@ def main():
 
     cs = Cs(CS_ARCH_X86, CS_MODE_32)
 
-    entry, phlist, poslist = scan(binpath)
+    entry_addr, phlist, poslist = scan(binpath)
 
     print('Offset Address Size')
     for (off, addr, size) in poslist:
@@ -144,7 +144,10 @@ def main():
     with open(binpath, 'r+b') as binf:
         binm = mmap.mmap(binf.fileno(), 0)
         for patch_token, _ in patchpos:
-            patch_addr = int(patch_token, 16)
+            if patch_token == 'ENTRY':
+                patch_addr = entry_addr
+            else:
+                patch_addr = int(patch_token, 16)
             patch_off = vaddr_offset(phlist, patch_addr)
             patch_len = 0
 
@@ -195,8 +198,8 @@ def main():
     patchcode = list()
     for patch_token, target_addr in patchpos:
         patch_off, patch_addr, patch_len = patchmap[patch_token]
-        jmpins = b'\xE9' + struct.pack('I',
-                (target_addr - patch_addr - 5) & 0xFFFFFFFF)
+        jmpins = b'\xE9' + struct.pack(
+                'I', (target_addr - patch_addr - 5) & 0xFFFFFFFF)
         code = bytes(jmpins + b'\x90' * (patch_len - len(jmpins)))
         patchcode.append((patch_off, code))
 

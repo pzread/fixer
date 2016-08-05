@@ -40,35 +40,6 @@ size_t copy_payload(int nfd, const char *path, size_t off) {
     return paylen;
 }
 
-int inner_append(CGCEf *cgcef, int nfd, size_t addr, size_t size,
-        unsigned int flags) {
-    CGCEf32_Ehdr *ehdr = cgcef32_getehdr(cgcef);
-    CGCEf32_Phdr *phdr = cgcef32_getphdr(cgcef);
-
-    for(size_t i = 0; i < ehdr->e_phnum; ++i, ++phdr) {
-        if(phdr->p_type == PT_LOAD) {
-            if(addr != phdr->p_vaddr + phdr->p_memsz) {
-                continue;
-            }
-            if(phdr->p_flags != flags) {
-                continue;
-            }
-            if(phdr->p_filesz != phdr->p_memsz) {
-                continue;
-            }
-            
-            CGCEf32_Phdr phdr_entry;
-            memcpy(&phdr_entry, phdr, sizeof(phdr_entry));
-            phdr_entry.p_filesz += size;
-            phdr_entry.p_memsz += size;
-            lseek(nfd, ehdr->e_phoff + i * ehdr->e_phentsize, SEEK_SET);
-            write(nfd, &phdr_entry, ehdr->e_phentsize);
-            return 1;
-        }
-    }
-    return 0;
-}
-
 int main(int argc, char *argv[]) {
     cgcef_version(EV_CURRENT);
 
@@ -106,35 +77,62 @@ int main(int argc, char *argv[]) {
     size_t text_addr = strtoul(argv[5], NULL, 10);
     size_t text_size = copy_payload(nfd, argv[3], text_off);
 
-    if(!inner_append(cgcef, nfd, text_addr, text_size, PF_X | PF_R)) {
+    CGCEf32_Phdr *phdr, phdr_entry;
+    size_t phentsize = ehdr->e_phentsize;
+    
+    // Try to do inner append.
+    bool appended = false;
+    phdr = cgcef32_getphdr(cgcef);
+    for(size_t i = 0; i < ehdr->e_phnum; ++i, ++phdr) {
+        if(phdr->p_type == PT_LOAD) {
+            if(text_addr != phdr->p_vaddr + phdr->p_memsz) {
+                continue;
+            }
+            if(phdr->p_flags != (PF_X | PF_R)) {
+                continue;
+            }
+            if(phdr->p_filesz != phdr->p_memsz) {
+                continue;
+            }
+            
+            memcpy(&phdr_entry, phdr, sizeof(phdr_entry));
+            phdr_entry.p_filesz += text_size;
+            phdr_entry.p_memsz += text_size;
+            lseek(nfd, ehdr->e_phoff + i * phentsize, SEEK_SET);
+            write(nfd, &phdr_entry, phentsize);
+
+            appended = true;
+            break;
+        }
+    }
+    if(!appended) {
         // Calculate address and size.
         size_t phdr_off = text_off + text_size;
         size_t phdr_addr = text_addr + text_size;
-        size_t new_phdr_size = (ehdr->e_phnum + 1) * ehdr->e_phentsize;
+        size_t new_phdr_size = (ehdr->e_phnum + 1) * phentsize;
 
         // Create PHDR.
-        CGCEf32_Phdr phdr_entry;
         lseek(nfd, phdr_off, SEEK_SET);
-        write(nfd, map + ehdr->e_phoff, ehdr->e_phentsize * ehdr->e_phnum);
+        write(nfd, map + ehdr->e_phoff, phentsize * ehdr->e_phnum);
         create_phdr(text_off, text_addr, text_size + new_phdr_size,
                 PF_X | PF_R, &phdr_entry);
-        write(nfd, &phdr_entry, ehdr->e_phentsize);
+        write(nfd, &phdr_entry, phentsize);
 
         // Fix PHDR.
-        CGCEf32_Phdr *phdr = cgcef32_getphdr(cgcef);
+        phdr = cgcef32_getphdr(cgcef);
         for(size_t i = 0; i < ehdr->e_phnum; ++i, ++phdr) {
             if(phdr->p_type == PT_PHDR) {
                 memcpy(&phdr_entry, phdr, sizeof(phdr_entry));
                 phdr_entry.p_offset = phdr_off;
                 phdr_entry.p_vaddr = phdr_addr;
                 phdr_entry.p_paddr = phdr_addr;
-                phdr_entry.p_filesz += ehdr->e_phentsize * 1;
-                phdr_entry.p_memsz += ehdr->e_phentsize * 1;
-                size_t phrel = i * ehdr->e_phentsize;
-                lseek(nfd, ehdr->e_phoff + phrel, SEEK_SET);
-                write(nfd, &phdr_entry, ehdr->e_phentsize);
-                lseek(nfd, phdr_off + phrel, SEEK_SET);
-                write(nfd, &phdr_entry, ehdr->e_phentsize);
+                phdr_entry.p_filesz += phentsize * 1;
+                phdr_entry.p_memsz += phentsize * 1;
+
+                lseek(nfd, ehdr->e_phoff + i * phentsize, SEEK_SET);
+                write(nfd, &phdr_entry, phentsize);
+                lseek(nfd, phdr_off + i * phentsize, SEEK_SET);
+                write(nfd, &phdr_entry, phentsize);
             }
         }
 
