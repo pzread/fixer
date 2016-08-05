@@ -1,12 +1,12 @@
 import argparse
 import mmap
+import os
 import re
+import struct
 import subprocess
 import sys
-import os
 import tempfile
 from capstone import *
-from keystone import *
 
 
 def scan(binpath):
@@ -39,7 +39,7 @@ def scan(binpath):
         
         rel = msize & 0xFFF
         if is_x and rel < 0x1000 and msize == fsize:
-            poslist.append((off + rel, addr + rel, 0x1000 - rel))
+            poslist.append((off + fsize, addr + msize, 0x1000 - rel))
 
     tail_off = (os.stat(binpath).st_size + 0xFFF) & ~0xFFF
     tail_addr = (tail_addr + 0xFFF) & ~0xFFF
@@ -56,9 +56,12 @@ def vaddr_offset(phlist, vaddr):
     return None
 
 
-def compile_payload(paypath, outpath):
-    subprocess.check_output(['nasm', '-O0', '-f', 'elf', '-o',
-            outpath, paypath])
+def compile_payload(paypath, outpath, asm):
+    if asm == 'nasm':
+        subprocess.check_output(['nasm', '-O0', '-f', 'elf', '-o',
+                outpath, paypath])
+    elif asm == 'as':
+        subprocess.check_output(['as', '--32', '-o', outpath, paypath])
 
 
 def link_payload(elfpaths, text_addr, outpath, static=False):
@@ -119,7 +122,6 @@ def main():
         outputpath = binpath + '_patch'
 
     cs = Cs(CS_ARCH_X86, CS_MODE_32)
-    ks = Ks(KS_ARCH_X86, KS_MODE_32)
 
     entry, phlist, poslist = scan(binpath)
 
@@ -131,41 +133,40 @@ def main():
         return
 
     payelf = tempfile.NamedTemporaryFile()
-    compile_payload(paypath, payelf.name)
+    compile_payload(paypath, payelf.name, 'nasm')
     with tempfile.NamedTemporaryFile() as tmpobj:
         funclist = link_payload([payelf.name], 0x0, tmpobj.name)
 
     patchpos = get_patchpos(funclist)
-
-    binf = open(binpath, 'r+b')
-    binm = mmap.mmap(binf.fileno(), 0)
-    oricode = '[BITS 32]\nsection .backtext\n'
-    jmpins_len = len(ks.asm('jmp 0x0')[0])
     patchmap = dict()
-    for patch_token, _ in patchpos:
-        patch_addr = int(patch_token, 16)
-        patch_off = vaddr_offset(phlist, patch_addr)
-        patch_len = 0
+    oricode = ['.intel_syntax noprefix', '.section .backtext']
 
-        oricode += 'global back_%s\nback_%s:\n'%(patch_token, patch_token)
-        for ins in cs.disasm(binm[patch_off:], patch_addr):
-            if ins.address - patch_addr >= jmpins_len:
-                patch_len = ins.address - patch_addr
-                oricode += 'jmp 0x%x\n'%ins.address
-                break
+    with open(binpath, 'r+b') as binf:
+        binm = mmap.mmap(binf.fileno(), 0)
+        for patch_token, _ in patchpos:
+            patch_addr = int(patch_token, 16)
+            patch_off = vaddr_offset(phlist, patch_addr)
+            patch_len = 0
 
-            oricode += '%s %s\n'%(ins.mnemonic, ins.op_str)
+            oricode.append('.global back_%s'%patch_token)
+            oricode.append('back_%s:'%patch_token)
+            for ins in cs.disasm(binm[patch_off:], patch_addr):
+                if ins.address - patch_addr >= 5:
+                    patch_len = ins.address - patch_addr
+                    oricode.append('jmp 0x%x'%ins.address)
+                    break
 
-        patchmap[patch_token] = (patch_off, patch_addr, patch_len)
+                oricode.append('%s %s'%(ins.mnemonic, ins.op_str))
 
-    binm.close()
-    binf.close()
+            patchmap[patch_token] = (patch_off, patch_addr, patch_len)
+
+        binm.close()
 
     oriasm = tempfile.NamedTemporaryFile()
-    oriasm.write(oricode.encode('utf-8'))
+    oriasm.write(('\n'.join(oricode) + '\n').encode('utf-8'))
     oriasm.flush()
     orielf = tempfile.NamedTemporaryFile()
-    compile_payload(oriasm.name, orielf.name)
+    compile_payload(oriasm.name, orielf.name, 'as')
     payobj = tempfile.NamedTemporaryFile()
     link_payload([payelf.name, orielf.name], 0x0, payobj.name, True)
     paytext = tempfile.NamedTemporaryFile()
@@ -187,11 +188,11 @@ def main():
 
     patchpos = get_patchpos(funclist)
     patchcode = list()
-    padins, _ = ks.asm('nop')
     for patch_token, target_addr in patchpos:
         patch_off, patch_addr, patch_len = patchmap[patch_token]
-        jmpins, _ = ks.asm('jmp 0x%x'%target_addr, patch_addr)
-        code = bytes(jmpins + padins * (patch_len - len(jmpins)))
+        jmpins = b'\xE9' + struct.pack('I',
+                (target_addr - patch_addr - 5) & 0xFFFFFFFF)
+        code = bytes(jmpins + b'\x90' * (patch_len - len(jmpins)))
         patchcode.append((patch_off, code))
 
     append(binpath, paytext.name, text_off, text_addr, outputpath)

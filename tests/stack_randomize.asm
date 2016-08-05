@@ -4,5 +4,7 @@
     section .text
 
 PATCH(08048601)
+    mov eax, 7
+    int 0x80
     jmp BACK
-END_PATCH
+END
