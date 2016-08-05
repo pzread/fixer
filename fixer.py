@@ -74,7 +74,8 @@ def compile_payload(paypath, outpath, asm):
 
 def link_payload(elfpaths, text_addr, outpath, static=False):
     params = ['ld', '-m', 'elf_i386', '-T', LINKER_SCRIPT,
-            '--oformat', 'elf32-i386', '-Ttext=0x%x'%text_addr, '-o', outpath]
+            '--oformat', 'elf32-i386', '-Ttext={:#x}'.format(text_addr),
+            '-o', outpath]
     if static:
         params += ['--static']
     else:
@@ -135,7 +136,7 @@ def main():
 
     print('Offset Address Size')
     for (off, addr, size) in poslist:
-        print('0x%08x 0x%08x %d'%(off, addr, size))
+        print('{:#08x} {:#08x} {}'.format(off, addr, size))
 
     if paypath is None:
         return
@@ -161,18 +162,18 @@ def main():
 
             for idx, ins in enumerate(cs.disasm(binm[patch_off:], patch_addr)):
                 if idx == 0:
-                    token = 'back_%s'%patch_token
+                    token = 'back_{}'.format(patch_token)
                 elif idx == 1:
-                    token = 'skip_%s'%patch_token
-                oricode.append('.global %s'%token)
-                oricode.append('%s:'%token)
+                    token = 'skip_{}'.format(patch_token)
+                oricode.append('.global {}'.format(token))
+                oricode.append('{}:'.format(token))
 
                 if ins.address - patch_addr >= 5:
                     patch_len = ins.address - patch_addr
-                    oricode.append('jmp 0x%x'%ins.address)
+                    oricode.append('jmp {:#x}'.format(ins.address))
                     break
 
-                oricode.append('%s %s'%(ins.mnemonic, ins.op_str))
+                oricode.append('{} {}'.format(ins.mnemonic, ins.op_str))
 
             patchmap[patch_token] = (patch_off, patch_addr, patch_len)
 
@@ -199,7 +200,7 @@ def main():
             text_addr = addr
             break
 
-    print('Append at 0x%08x'%text_addr)
+    print('Append at {:#08x}'.format(text_addr))
 
     funclist = link_payload([payelf.name, orielf.name],
             text_addr, payobj.name, True)
