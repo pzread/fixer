@@ -161,12 +161,13 @@ def main():
             patch_len = 0
 
             for idx, ins in enumerate(cs.disasm(binm[patch_off:], patch_addr)):
-                if idx == 0:
-                    token = 'back_{}'.format(patch_token)
-                elif idx == 1:
-                    token = 'skip_{}'.format(patch_token)
-                oricode.append('.global {}'.format(token))
-                oricode.append('{}:'.format(token))
+                if idx < 2:
+                    if idx == 0:
+                        token = 'back_{}'.format(patch_token)
+                    elif idx == 1:
+                        token = 'skip_{}'.format(patch_token)
+                    oricode.append('.global {}'.format(token))
+                    oricode.append('{}:'.format(token))
 
                 if ins.address - patch_addr >= 5:
                     patch_len = ins.address - patch_addr
@@ -179,7 +180,8 @@ def main():
 
         binm.close()
 
-    oriasm = tempfile.NamedTemporaryFile()
+    #oriasm = tempfile.NamedTemporaryFile()
+    oriasm = open('x', 'wb')
     oriasm.write(('\n'.join(oricode) + '\n').encode('utf-8'))
     oriasm.flush()
     orielf = tempfile.NamedTemporaryFile()
