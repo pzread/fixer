@@ -148,9 +148,14 @@ def main():
             patch_off = vaddr_offset(phlist, patch_addr)
             patch_len = 0
 
-            oricode.append('.global back_%s'%patch_token)
-            oricode.append('back_%s:'%patch_token)
-            for ins in cs.disasm(binm[patch_off:], patch_addr):
+            for idx, ins in enumerate(cs.disasm(binm[patch_off:], patch_addr)):
+                if idx == 0:
+                    token = 'back_%s'%patch_token
+                elif idx == 1:
+                    token = 'skip_%s'%patch_token
+                oricode.append('.global %s'%token)
+                oricode.append('%s:'%token)
+
                 if ins.address - patch_addr >= 5:
                     patch_len = ins.address - patch_addr
                     oricode.append('jmp 0x%x'%ins.address)

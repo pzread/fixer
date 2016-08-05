@@ -1,10 +1,13 @@
 %macro _PATCH 1
-global patch_%1
-extern back_%1
-patch_%1:
-%define BACK back_%1
+    global patch_%1
+    extern back_%1
+    extern skip_%1
+    patch_%1:
+    %define BACK back_%1
+    %define SKIP skip_%1
 %endmacro
 %macro END 0
-%undef BACK
+    %undef BACK
+    %undef SKIP
 %endmacro
 %define PATCH(x) _PATCH x
