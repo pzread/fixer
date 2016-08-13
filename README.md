@@ -9,6 +9,10 @@ Requirements
 + binutils
 + libcgcef
 
+Install
+-------
+make
+
 Usage
 -----
 See the tests.
