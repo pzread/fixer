@@ -16,7 +16,7 @@ int create_phdr(size_t off, size_t addr, size_t size, unsigned int flags,
     phdr_entry->p_vaddr = addr;
     phdr_entry->p_paddr = addr;
     phdr_entry->p_filesz = size;
-    phdr_entry->p_memsz = (size + 0xFFF) & ~0xFFF;
+    phdr_entry->p_memsz = size;
     phdr_entry->p_flags = flags;
     phdr_entry->p_align = 0x1000;
     return 0;
@@ -108,14 +108,15 @@ int main(int argc, char *argv[]) {
     }
     if(!appended) {
         // Calculate address and size.
-        size_t phdr_off = text_off + text_size;
-        size_t phdr_addr = text_addr + text_size;
+        size_t phdr_off = ((text_off + text_size) + 0x3) & ~0x3;
+        size_t phdr_addr = ((text_addr + text_size) + 0x3) & ~0x3;
         size_t new_phdr_size = (ehdr->e_phnum + 1) * phentsize;
 
         // Create PHDR.
         lseek(nfd, phdr_off, SEEK_SET);
         write(nfd, map + ehdr->e_phoff, phentsize * ehdr->e_phnum);
-        create_phdr(text_off, text_addr, text_size + new_phdr_size,
+        create_phdr(text_off, text_addr,
+                (phdr_addr - text_addr) + new_phdr_size,
                 PF_X | PF_R, &phdr_entry);
         write(nfd, &phdr_entry, phentsize);
 

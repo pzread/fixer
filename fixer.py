@@ -53,7 +53,20 @@ def scan(binpath):
     tail_addr = (tail_addr + 0xFFF) & ~0xFFF
     poslist.append((tail_off, tail_addr, 256 ** 4))
 
-    return entry, phlist, poslist
+    cposlist = list()
+    for off, addr, size in poslist:
+        flag = True
+        for phoff, _, phsize, _ in phlist:
+            if phoff >= off and phoff < (off + size):
+                flag = False
+                break
+            if off >= phoff and off < (phoff + phsize):
+                flag = False
+                break
+        if flag:
+            cposlist.append((off, addr, size))
+
+    return entry, phlist, cposlist
 
 
 def vaddr_offset(phlist, vaddr):
