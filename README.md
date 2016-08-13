@@ -5,8 +5,9 @@ Requirements
 ------------
 + capstone with python3 binding
 + nasm
-+ objdump
 + as
++ objdump
++ libcgcef
 
 Usage
 -----
