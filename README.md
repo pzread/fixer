@@ -3,10 +3,10 @@ Fixer
 
 Requirements
 ------------
++ python3
 + capstone with python3 binding
 + nasm
-+ as
-+ objdump
++ binutils
 + libcgcef
 
 Usage
@@ -17,4 +17,6 @@ See the tests.
 
 `jmp SKIP` will resume at the next instruction of the patched address.
 
-The patch memory is readonly.
+The memory space of your patch is readonly.
+
+The jmp instruction needs 5 bytes at the patched address. Although the Fixer will recover overwritten instructions, be careful not to overlap the head of the next basic block. This tool can't handle this stitution.
