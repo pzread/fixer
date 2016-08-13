@@ -11,15 +11,21 @@ Requirements
 
 Install
 -------
+```
+cd fixer
 make
+```
 
 Usage
 -----
-See the tests.
+```
+./fixer.py -p tests/LEGIT_00007.asm -o LEGIT_00007-x-y.cb_patch ~/cgc/LEGIT_00007-x-y.cb
+```
 
-`jmp BACK` will resume at the patched address.
+See the tests for how to write a patch.
 
-`jmp SKIP` will resume at the next instruction of the patched address.
++ `jmp BACK` will resume at the patched address.
++ `jmp SKIP` will resume at the next instruction of the patched address.
 
 The memory space of your patch is readonly.
 
